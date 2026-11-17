@@ -1,3 +1,4 @@
+import html
 import json
 import altair as alt
 import pandas as pd
@@ -10,6 +11,12 @@ st.set_page_config(
     page_icon="🛡️",
     layout="wide",
 )
+
+
+def escape_text(val) -> str:
+    """외부 모듈 버전에 의존하지 않는 자체 HTML 이스케이프 함수입니다."""
+    return html.escape(str(val if val is not None else ""))
+
 
 st.markdown(
     """
@@ -206,10 +213,10 @@ def get_comparison_text(api_risk: str, user_risk: str) -> str:
 
 
 def render_kpi_card(col, label: str, value: str, accent_color: str = "#60a5fa"):
-    safe_val = api.escape_text(value)
+    safe_val = escape_text(value)
     html_block = (
         f'<div class="kpi-box" style="border-top: 3px solid {accent_color};">'
-        f'<div class="kpi-label">{label}</div>'
+        f'<div class="kpi-label">{escape_text(label)}</div>'
         f'<div class="kpi-value" title="{safe_val}">{safe_val}</div>'
         f"</div>"
     )
@@ -242,21 +249,24 @@ def render_unified_health_panel(items: list[dict]):
     parts = ['<div class="unified-panel">']
     for item in items:
         lv = level_styles.get(item.get("level", "caution"), level_styles["caution"])
-        hp = max(6, min(100, int(item.get("hp", 50))))
+        try:
+            hp = max(6, min(100, int(item.get("hp", 50))))
+        except (TypeError, ValueError):
+            hp = 50
         parts.append(
             '<div class="hp-row">'
             '<div class="hp-header">'
             '<div class="hp-title-group">'
-            f'<span class="hp-title">{api.escape_text(item["title"])}</span>'
+            f'<span class="hp-title">{escape_text(item.get("title", ""))}</span>'
             f'<span class="hp-badge" style="color:{lv["color"]}; background:{lv["bg"]}; border:1px solid {lv["color"]}44;">{lv["label"]}</span>'
-            f'<span class="hp-main-val">{api.escape_text(item["main"])}</span>'
+            f'<span class="hp-main-val">{escape_text(item.get("main", "-"))}</span>'
             "</div>"
             f'<span class="hp-percent" style="color:{lv["color"]};">안전도 {hp}%</span>'
             "</div>"
             '<div class="hp-track">'
             f'<div class="hp-fill" style="width:{hp}%; background:{lv["grad"]};"></div>'
             "</div>"
-            f'<div class="hp-desc">{api.escape_text(item["desc"])}</div>'
+            f'<div class="hp-desc">{escape_text(item.get("desc", ""))}</div>'
             "</div>"
         )
     parts.append("</div>")
@@ -265,10 +275,10 @@ def render_unified_health_panel(items: list[dict]):
 
 all_records = db.get_all_links()
 total_cnt = len(all_records)
-safe_cnt = sum(1 for r in all_records if str(r["api_risk"]).isdigit() and int(r["api_risk"]) <= 3)
-caution_cnt = sum(1 for r in all_records if str(r["api_risk"]).isdigit() and 4 <= int(r["api_risk"]) <= 6)
-danger_cnt = sum(1 for r in all_records if str(r["api_risk"]).isdigit() and int(r["api_risk"]) >= 7)
-wait_cnt = sum(1 for r in all_records if r["status"] == "대기 중")
+safe_cnt = sum(1 for r in all_records if str(r.get("api_risk", "")).isdigit() and int(r["api_risk"]) <= 3)
+caution_cnt = sum(1 for r in all_records if str(r.get("api_risk", "")).isdigit() and 4 <= int(r["api_risk"]) <= 6)
+danger_cnt = sum(1 for r in all_records if str(r.get("api_risk", "")).isdigit() and int(r["api_risk"]) >= 7)
+wait_cnt = sum(1 for r in all_records if r.get("status") == "대기 중")
 
 # ==============================================================================
 # 왼쪽 사이드바
@@ -333,19 +343,23 @@ if menu == "🔍 실시간 링크 검사":
             with st.spinner("보안 기관 데이터와 주소 안전성을 분석하고 있습니다..."):
                 result = api.inspect_url(clean_url)
 
-            if result["success"]:
+            if isinstance(result, dict) and result.get("success"):
                 st.session_state["scan_result"] = {
                     **result,
                     "source": clean_src if clean_src else "직접 검사",
                 }
             else:
                 st.session_state.pop("scan_result", None)
-                st.error(result["error"])
+                err_msg = result.get("error", "검사 중 알 수 없는 오류가 발생했습니다.") if isinstance(result, dict) else "검사 요청 처리 중 오류가 발생했습니다."
+                st.error(err_msg)
 
-    if "scan_result" in st.session_state:
+    if "scan_result" in st.session_state and isinstance(st.session_state["scan_result"], dict):
         res = st.session_state["scan_result"]
-        score = res["risk_score"]
-        detail = res["detail_data"]
+        try:
+            score = int(res.get("risk_score", 5))
+        except (TypeError, ValueError):
+            score = 5
+        detail = res.get("detail_data") if isinstance(res.get("detail_data"), dict) else {}
 
         if score >= 7:
             card_cls, badge_icon = "verdict-danger", "🔴"
@@ -359,16 +373,21 @@ if menu == "🔍 실시간 링크 검사":
         top_col, save_col = st.columns([4.2, 0.9])
         with top_col:
             formula_line = detail.get("score_formula") or res.get("score_formula", "")
-            formula_html = f" &nbsp;|&nbsp; <span>{api.escape_text(formula_line)}</span>" if formula_line else ""
+            formula_html = f" &nbsp;|&nbsp; <span>{escape_text(formula_line)}</span>" if formula_line else ""
+            verdict_title = res.get("verdict_title", "검사 완료")
+            verdict_desc = res.get("verdict_desc", "")
+            final_url_str = res.get("final_url", res.get("input_url", ""))
+            source_str = res.get("source", "직접 검사")
+
             verdict_html = (
                 f'<div class="verdict-card {card_cls}">'
                 f'<div style="font-size:1.15rem; font-weight:700; margin-bottom:4px;">'
-                f"{badge_icon} {api.escape_text(res['verdict_title'])} &nbsp;·&nbsp; 위험도 {score} / 10점"
+                f"{badge_icon} {escape_text(verdict_title)} &nbsp;·&nbsp; 위험도 {score} / 10점"
                 f"</div>"
-                f'<div style="font-size:0.93rem; margin-bottom:6px;">{api.escape_text(res["verdict_desc"])}</div>'
+                f'<div style="font-size:0.93rem; margin-bottom:6px;">{escape_text(verdict_desc)}</div>'
                 f'<div style="font-size:0.81rem; opacity:0.82;">'
-                f"검사 주소: <code>{api.escape_text(res['final_url'])}</code> &nbsp;|&nbsp; "
-                f"출처: <b>{api.escape_text(res['source'])}</b>{formula_html}"
+                f"검사 주소: <code>{escape_text(final_url_str)}</code> &nbsp;|&nbsp; "
+                f"출처: <b>{escape_text(source_str)}</b>{formula_html}"
                 f"</div></div>"
             )
             st.markdown(verdict_html, unsafe_allow_html=True)
@@ -376,11 +395,11 @@ if menu == "🔍 실시간 링크 검사":
             st.markdown("<div style='height:31px;'></div>", unsafe_allow_html=True)
             if st.button("💾 내 기록 저장", type="primary", use_container_width=True):
                 if db.save_api_result(
-                    url=res["input_url"],
-                    final_url=res["final_url"],
-                    source=res["source"],
+                    url=res.get("input_url", final_url_str),
+                    final_url=final_url_str,
+                    source=source_str,
                     api_risk_score=score,
-                    engine_summary=res["engine_summary"],
+                    engine_summary=res.get("engine_summary", "-"),
                     detail_data=detail,
                 ):
                     st.session_state.pop("scan_result", None)
@@ -396,29 +415,29 @@ if menu == "🔍 실시간 링크 검사":
             [
                 {
                     "title": "1. 보안 기관 검증",
-                    "main": detail.get("engine_main", res["engine_summary"]),
-                    "desc": detail.get("engine_desc", ""),
+                    "main": detail.get("engine_main", res.get("engine_summary", "-")),
+                    "desc": detail.get("engine_desc") or detail.get("engine_easy", ""),
                     "hp": detail.get("engine_hp", 80),
                     "level": detail.get("engine_level", "safe"),
                 },
                 {
                     "title": "2. 사이트 성격 · 평판",
                     "main": detail.get("cat_main", "미분류 (신규·개인)"),
-                    "desc": detail.get("cat_desc", ""),
+                    "desc": detail.get("cat_desc") or detail.get("cat_easy", ""),
                     "hp": detail.get("cat_hp", 60),
                     "level": detail.get("cat_level", "caution"),
                 },
                 {
                     "title": "3. 보안 연결 · 암호화",
                     "main": detail.get("conn_main", "-"),
-                    "desc": detail.get("conn_desc", ""),
+                    "desc": detail.get("conn_desc") or detail.get("conn_easy", ""),
                     "hp": detail.get("conn_hp", 50),
                     "level": detail.get("conn_level", "caution"),
                 },
                 {
                     "title": "4. 도메인 · 사칭 점검",
                     "main": detail.get("struct_main", "-"),
-                    "desc": detail.get("struct_desc", ""),
+                    "desc": detail.get("struct_desc") or detail.get("struct_easy", ""),
                     "hp": detail.get("struct_hp", 100),
                     "level": detail.get("struct_level", "safe"),
                 },
@@ -469,7 +488,7 @@ elif menu == "➕ 직접 링크 등록":
                 else:
                     st.error("데이터베이스 등록 중 오류가 발생했습니다.")
 
-    wait_records = [r for r in all_records if r["status"] == "대기 중"]
+    wait_records = [r for r in all_records if r.get("status") == "대기 중"]
     if wait_records:
         st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
         st.markdown(f"**현재 검사 대기 중인 링크 ({len(wait_records)}건)**")
@@ -477,11 +496,11 @@ elif menu == "➕ 직접 링크 등록":
             [
                 {
                     "순번": f"No. {i}",
-                    "링크 주소 (URL)": r["url"],
-                    "출처": r["source"],
-                    "상태": r["status"],
-                    "체감 위험도": r["user_risk"],
-                    "등록일시": r["created_at"],
+                    "링크 주소 (URL)": r.get("url", ""),
+                    "출처": r.get("source", ""),
+                    "상태": r.get("status", "대기 중"),
+                    "체감 위험도": r.get("user_risk", "입력 없음"),
+                    "등록일시": r.get("created_at", ""),
                 }
                 for i, r in enumerate(wait_records, start=1)
             ]
@@ -527,13 +546,13 @@ elif menu == "📋 내 기록 조회 · 검색":
         records = db.search_links(keyword)
 
         if status_filter == "🟢 안전 (1~3점)":
-            records = [r for r in records if str(r["api_risk"]).isdigit() and int(r["api_risk"]) <= 3]
+            records = [r for r in records if str(r.get("api_risk", "")).isdigit() and int(r["api_risk"]) <= 3]
         elif status_filter == "🟡 주의 (4~6점)":
-            records = [r for r in records if str(r["api_risk"]).isdigit() and 4 <= int(r["api_risk"]) <= 6]
+            records = [r for r in records if str(r.get("api_risk", "")).isdigit() and 4 <= int(r["api_risk"]) <= 6]
         elif status_filter == "🔴 위험 (7~10점)":
-            records = [r for r in records if str(r["api_risk"]).isdigit() and int(r["api_risk"]) >= 7]
+            records = [r for r in records if str(r.get("api_risk", "")).isdigit() and int(r["api_risk"]) >= 7]
         elif status_filter == "⏳ 대기 중":
-            records = [r for r in records if r["status"] == "대기 중"]
+            records = [r for r in records if r.get("status") == "대기 중"]
 
         if len(records) == 0:
             if keyword.strip():
@@ -546,13 +565,13 @@ elif menu == "📋 내 기록 조회 · 검색":
             table_rows = [
                 {
                     "순번": f"No. {i}",
-                    "판정 결과": get_status_badge(r["status"], r["api_risk"]),
-                    "링크 주소 (URL)": r["url"],
-                    "출처": r["source"],
-                    "API 위험도": f"{r['api_risk']}/10점" if str(r["api_risk"]).isdigit() else "미검사",
-                    "체감 위험도": f"{r['user_risk']}/10점" if str(r["user_risk"]).isdigit() else "입력 없음",
-                    "비교 분석": get_comparison_text(r["api_risk"], r["user_risk"]),
-                    "등록일시": r["created_at"][5:] if len(r["created_at"]) >= 16 else r["created_at"],
+                    "판정 결과": get_status_badge(r.get("status", ""), r.get("api_risk", "")),
+                    "링크 주소 (URL)": r.get("url", ""),
+                    "출처": r.get("source", ""),
+                    "API 위험도": f"{r['api_risk']}/10점" if str(r.get("api_risk", "")).isdigit() else "미검사",
+                    "체감 위험도": f"{r['user_risk']}/10점" if str(r.get("user_risk", "")).isdigit() else "입력 없음",
+                    "비교 분석": get_comparison_text(r.get("api_risk", ""), r.get("user_risk", "")),
+                    "등록일시": r["created_at"][5:] if len(str(r.get("created_at", ""))) >= 16 else r.get("created_at", ""),
                 }
                 for i, r in enumerate(records, start=1)
             ]
@@ -577,7 +596,7 @@ elif menu == "📋 내 기록 조회 · 검색":
 
             with st.container(border=True):
                 option_map = {
-                    f"No. {i}  |  {r['url']}  ({r['source']})": (i, r)
+                    f"No. {i}  |  {r.get('url', '')}  ({r.get('source', '')})": (i, r)
                     for i, r in enumerate(records, start=1)
                 }
                 sel_col, info_col = st.columns([1.85, 3.15])
@@ -589,16 +608,16 @@ elif menu == "📋 내 기록 조회 · 검색":
                 sel_no, target = option_map[selected_label]
                 detail = safe_load_json(target.get("detail_json", "{}"))
 
-                api_str = f"{target['api_risk']}/10점" if str(target["api_risk"]).isdigit() else "미검사"
-                user_str = f"{target['user_risk']}/10점" if str(target["user_risk"]).isdigit() else "입력 없음"
-                verdict_info = detail.get("verdict_desc") or target["engine_summary"]
+                api_str = f"{target['api_risk']}/10점" if str(target.get("api_risk", "")).isdigit() else "미검사"
+                user_str = f"{target['user_risk']}/10점" if str(target.get("user_risk", "")).isdigit() else "입력 없음"
+                verdict_info = detail.get("verdict_desc") or target.get("engine_summary", "")
                 tech_brief = detail.get("score_formula") or ""
 
                 info_html = (
                     '<div style="display:flex; align-items:center; flex-wrap:wrap; gap:6px; padding-top:2px;">'
-                    f'<span class="info-pill">API: <b>{api_str}</b></span>'
-                    f'<span class="info-pill">체감: <b>{user_str}</b></span>'
-                    f'<span class="desc-inline">{api.escape_text(verdict_info)}</span>'
+                    f'<span class="info-pill">API: <b>{escape_text(api_str)}</b></span>'
+                    f'<span class="info-pill">체감: <b>{escape_text(user_str)}</b></span>'
+                    f'<span class="desc-inline">{escape_text(verdict_info)}</span>'
                     "</div>"
                 )
                 info_col.markdown(info_html, unsafe_allow_html=True)
@@ -608,7 +627,7 @@ elif menu == "📋 내 기록 조회 · 검색":
                 st.markdown("<div style='height:6px;'></div>", unsafe_allow_html=True)
 
                 c_slider, c_save, c_scan, c_del = st.columns([3.0, 1.0, 1.0, 0.8])
-                default_val = int(target["user_risk"]) if str(target["user_risk"]).isdigit() else 5
+                default_val = int(target["user_risk"]) if str(target.get("user_risk", "")).isdigit() else 5
                 new_score = c_slider.slider(
                     "내 체감 위험도 변경 (1~10점)",
                     min_value=1,
@@ -629,25 +648,26 @@ elif menu == "📋 내 기록 조회 · 검색":
                     st.rerun()
 
                 c_scan.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)
-                if target["status"] == "대기 중":
+                if target.get("status") == "대기 중":
                     if c_scan.button("🔍 지금 검사", key=f"scan_{target['id']}", type="primary", use_container_width=True):
                         with st.spinner("안전 여부를 분석하고 있습니다..."):
-                            scan_res = api.inspect_url(target["url"])
-                        if scan_res["success"]:
+                            scan_res = api.inspect_url(target.get("url", ""))
+                        if isinstance(scan_res, dict) and scan_res.get("success"):
                             db.update_scan_result_by_id(
                                 link_id=target["id"],
-                                final_url=scan_res["final_url"],
-                                api_risk_score=scan_res["risk_score"],
-                                engine_summary=scan_res["engine_summary"],
-                                detail_data=scan_res["detail_data"],
+                                final_url=scan_res.get("final_url", target.get("url", "")),
+                                api_risk_score=scan_res.get("risk_score", 5),
+                                engine_summary=scan_res.get("engine_summary", "-"),
+                                detail_data=scan_res.get("detail_data", {}),
                             )
                             st.session_state["toast_msg"] = (
                                 "success",
-                                f"No. {sel_no} 검사 완료! ({scan_res['risk_score']}점)",
+                                f"No. {sel_no} 검사 완료! ({scan_res.get('risk_score')}점)",
                             )
                             st.rerun()
                         else:
-                            st.error(scan_res["error"])
+                            err_msg = scan_res.get("error", "검사 중 오류가 발생했습니다.") if isinstance(scan_res, dict) else "검사 요청에 실패했습니다."
+                            st.error(err_msg)
 
                 c_del.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)
                 if c_del.button("🗑️ 삭제", key=f"del_{target['id']}", use_container_width=True):
@@ -727,7 +747,7 @@ elif menu == "📊 위험도 통계 · 요약":
                 st.markdown("**유입 출처별 현황**")
                 source_counts = {}
                 for r in all_records:
-                    src = r["source"]
+                    src = r.get("source", "직접 검사")
                     source_counts[src] = source_counts.get(src, 0) + 1
                 src_df = pd.DataFrame(
                     [{"출처": k, "등록 건수": f"{v}건"} for k, v in source_counts.items()]

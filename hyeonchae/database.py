@@ -1,18 +1,35 @@
 import json
+import os
 import sqlite3
+import tempfile
 from datetime import datetime
 
-DB_NAME = "safelink.db"
+
+def _resolve_db_path() -> str:
+    """실행 위치와 권한을 확인해 쓰기 가능한 SQLite DB 경로를 반환합니다."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    primary_path = os.path.join(base_dir, "safelink.db")
+    try:
+        os.makedirs(base_dir, exist_ok=True)
+        with open(primary_path, "a", encoding="utf-8"):
+            pass
+        return primary_path
+    except OSError:
+        return os.path.join(tempfile.gettempdir(), "safelink.db")
+
+
+DB_NAME = _resolve_db_path()
 
 
 def get_connection():
     conn = sqlite3.connect(DB_NAME, timeout=10.0)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 5000;")
     return conn
 
 
 def init_db():
-    """프로그램 시작 시 links 테이블을 자동 생성하고 기존 스키마와 호환시킵니다."""
+    """프로그램 시작 시 links 테이블을 생성하고 기존 DB 스키마와 자동 호환시킵니다."""
     try:
         with get_connection() as conn:
             conn.execute("PRAGMA journal_mode=WAL;")
@@ -43,11 +60,13 @@ def init_db():
 
 
 def add_direct_link(url: str, source: str) -> bool:
-    """요구사항 3: 직접 링크 등록 (체감 위험도='입력 없음', 검사 상태='대기 중')"""
-    clean_url = url.strip()[:2000]
-    clean_source = source.strip()[:50]
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    """직접 링크 등록 (체감 위험도='입력 없음', 검사 상태='대기 중')"""
+    clean_url = str(url or "").strip()[:2000]
+    clean_source = str(source or "").strip()[:50]
+    if not clean_url or not clean_source:
+        return False
 
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
     try:
         with get_connection() as conn:
             conn.execute(
@@ -71,13 +90,21 @@ def save_api_result(
     engine_summary: str,
     detail_data: dict,
 ) -> bool:
-    """요구사항 5: 외부 API 검사 결과 저장 (초기 체감 위험도='입력 없음')"""
-    clean_url = url.strip()[:2000]
-    clean_source = (source.strip() if source.strip() else "직접 검사")[:50]
-    safe_score = max(1, min(10, int(api_risk_score)))
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    """외부 API 검사 결과 저장 (초기 체감 위험도='입력 없음')"""
+    clean_url = str(url or "").strip()[:2000]
+    if not clean_url:
+        return False
 
+    raw_src = str(source or "").strip()
+    clean_source = (raw_src if raw_src else "직접 검사")[:50]
     try:
+        safe_score = max(1, min(10, int(api_risk_score)))
+    except (TypeError, ValueError):
+        safe_score = 5
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    try:
+        detail_str = json.dumps(detail_data if isinstance(detail_data, dict) else {}, ensure_ascii=False)
         with get_connection() as conn:
             conn.execute(
                 """
@@ -86,13 +113,13 @@ def save_api_result(
                 """,
                 (
                     clean_url,
-                    (final_url.strip() or clean_url)[:2000],
+                    (str(final_url or "").strip() or clean_url)[:2000],
                     clean_source,
                     "검사 완료",
                     str(safe_score),
                     "입력 없음",
-                    engine_summary,
-                    json.dumps(detail_data, ensure_ascii=False),
+                    str(engine_summary or "-"),
+                    detail_str,
                     now,
                 ),
             )
@@ -110,8 +137,10 @@ def update_scan_result_by_id(
     detail_data: dict,
 ) -> bool:
     """대기 중이던 링크를 검사 완료 상태로 갱신합니다."""
-    safe_score = max(1, min(10, int(api_risk_score)))
     try:
+        target_id = int(link_id)
+        safe_score = max(1, min(10, int(api_risk_score)))
+        detail_str = json.dumps(detail_data if isinstance(detail_data, dict) else {}, ensure_ascii=False)
         with get_connection() as conn:
             cursor = conn.execute(
                 """
@@ -120,12 +149,12 @@ def update_scan_result_by_id(
                 WHERE id = ?
                 """,
                 (
-                    final_url[:2000],
+                    str(final_url or "")[:2000],
                     "검사 완료",
                     str(safe_score),
-                    engine_summary,
-                    json.dumps(detail_data, ensure_ascii=False),
-                    link_id,
+                    str(engine_summary or "-"),
+                    detail_str,
+                    target_id,
                 ),
             )
             conn.commit()
@@ -135,7 +164,7 @@ def update_scan_result_by_id(
 
 
 def get_all_links() -> list[dict]:
-    """요구사항 1: 저장된 전체 기록 조회"""
+    """저장된 전체 기록을 최신순으로 조회합니다."""
     try:
         with get_connection() as conn:
             cursor = conn.execute("SELECT * FROM links ORDER BY id DESC")
@@ -145,8 +174,8 @@ def get_all_links() -> list[dict]:
 
 
 def search_links(keyword: str) -> list[dict]:
-    """요구사항 2: URL 또는 출처 필드로 검색 (앞뒤 공백 제거, 빈칸 시 전체 반환)"""
-    clean_keyword = keyword.strip()
+    """URL 또는 출처 필드로 검색합니다. (빈칸 입력 시 전체 반환)"""
+    clean_keyword = str(keyword or "").strip()
     if not clean_keyword:
         return get_all_links()
 
@@ -173,8 +202,8 @@ def search_links(keyword: str) -> list[dict]:
 
 
 def find_existing_url(url: str) -> dict | None:
-    """중복 검사 방지를 위해 동일 URL이 이미 저장되어 있는지 조회합니다."""
-    clean_url = url.strip()
+    """동일 URL이 이미 저장되어 있는지 조회합니다."""
+    clean_url = str(url or "").strip()
     if not clean_url:
         return None
     try:
@@ -190,26 +219,28 @@ def find_existing_url(url: str) -> dict | None:
 
 
 def update_user_risk(link_id: int, risk_score: int) -> bool:
-    """요구사항 6: 선택한 링크의 체감 위험도를 1~10점으로 변경합니다."""
-    safe_score = max(1, min(10, int(risk_score)))
+    """선택한 링크의 체감 위험도를 1~10점으로 변경합니다."""
     try:
+        target_id = int(link_id)
+        safe_score = max(1, min(10, int(risk_score)))
         with get_connection() as conn:
             cursor = conn.execute(
                 "UPDATE links SET user_risk = ? WHERE id = ?",
-                (str(safe_score), link_id),
+                (str(safe_score), target_id),
             )
             conn.commit()
             return cursor.rowcount > 0
-    except sqlite3.Error:
+    except (sqlite3.Error, TypeError, ValueError):
         return False
 
 
 def delete_link(link_id: int) -> bool:
-    """요구사항 7: 선택한 기록을 삭제합니다."""
+    """선택한 기록을 삭제합니다."""
     try:
+        target_id = int(link_id)
         with get_connection() as conn:
-            cursor = conn.execute("DELETE FROM links WHERE id = ?", (link_id,))
+            cursor = conn.execute("DELETE FROM links WHERE id = ?", (target_id,))
             conn.commit()
             return cursor.rowcount > 0
-    except sqlite3.Error:
+    except (sqlite3.Error, TypeError, ValueError):
         return False

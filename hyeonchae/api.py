@@ -6,10 +6,7 @@ import time
 from urllib.parse import urlparse, urlunparse
 import requests
 
-VT_API_KEY = os.getenv(
-    "VT_API_KEY",
-    "2f8ed280bfc86fa50f1d215681094a86396b96a9123a728116d1325baf2a023d",
-)
+DEFAULT_VT_API_KEY = "2f8ed280bfc86fa50f1d215681094a86396b96a9123a728116d1325baf2a023d"
 VT_BASE_URL = "https://www.virustotal.com/api/v3"
 
 OFFICIAL_DOMAINS = [
@@ -62,6 +59,25 @@ UNRATED_CATEGORY_KEYWORDS = (
 )
 
 
+def get_vt_api_key() -> str:
+    """환경 변수 -> Streamlit Secrets -> 기본 키 순서로 API 키를 안전하게 조회합니다."""
+    env_key = os.getenv("VT_API_KEY", "").strip()
+    if env_key:
+        return env_key
+    try:
+        import streamlit as st
+        secret_key = str(st.secrets.get("VT_API_KEY", "")).strip()
+        if secret_key:
+            return secret_key
+    except Exception:
+        pass
+    return DEFAULT_VT_API_KEY
+
+
+def escape_text(val: str) -> str:
+    return html.escape(str(val or ""))
+
+
 def normalize_and_validate_url(raw_url: str) -> tuple[bool, str]:
     """앞뒤 공백·제어문자를 제거하고 검사 가능한 정상 웹 URL 형식인지 검증합니다."""
     if not isinstance(raw_url, str):
@@ -106,7 +122,13 @@ def normalize_and_validate_url(raw_url: str) -> tuple[bool, str]:
     try:
         ip_obj = ipaddress.ip_address(raw_host)
         is_ip = True
-        if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_reserved or ip_obj.is_link_local or ip_obj.is_multicast:
+        if (
+            ip_obj.is_private
+            or ip_obj.is_loopback
+            or ip_obj.is_reserved
+            or ip_obj.is_link_local
+            or ip_obj.is_multicast
+        ):
             return False, "내부망(로컬) IP 주소는 외부 보안 검사를 실행할 수 없습니다."
     except ValueError:
         is_ip = False
@@ -183,7 +205,6 @@ def analyze_url_technically(url: str) -> dict:
     struct_risk = 0
     reason_tags = []
 
-    # 1) 보안 연결(HTTPS) 및 단축 URL 추적
     is_https = parsed.scheme == "https"
     if not is_https:
         conn_risk += 1
@@ -235,7 +256,6 @@ def analyze_url_technically(url: str) -> dict:
         conn_desc = "데이터가 암호화 없이 전송되므로 로그인·개인정보 입력을 피하세요. (HTTP 평문 · +1점)"
         conn_hp, conn_level = 50, "caution"
 
-    # 2) 주소 위장·사칭 점검
     is_public_ip = False
     try:
         ipaddress.ip_address(hostname)
@@ -365,7 +385,10 @@ def _summarize_site_profile(attrs: dict, malicious: int, suspicious: int) -> tup
     if not isinstance(attrs, dict):
         attrs = {}
     categories = attrs.get("categories") if isinstance(attrs.get("categories"), dict) else {}
-    reputation = int(attrs.get("reputation") or 0)
+    try:
+        reputation = int(attrs.get("reputation") or 0)
+    except (TypeError, ValueError):
+        reputation = 0
     raw_title = str(attrs.get("title") or "").strip()
 
     raw_cats = [str(v).strip() for v in categories.values() if v]
@@ -425,9 +448,18 @@ def _summarize_site_profile(attrs: dict, malicious: int, suspicious: int) -> tup
     )
 
 
+def _safe_json_dict(response: requests.Response) -> dict:
+    try:
+        data = response.json()
+        return data if isinstance(data, dict) else {}
+    except (ValueError, TypeError):
+        return {}
+
+
 def inspect_url(raw_url: str) -> dict:
-    """요구사항 4: 외부 API와 기술 점검을 결합해 4개 핵심 지표와 체력바(안전도) 데이터를 반환합니다."""
-    if not VT_API_KEY or not VT_API_KEY.strip():
+    """외부 API와 기술 점검을 결합해 4개 핵심 지표와 체력바(안전도) 데이터를 반환합니다."""
+    api_key = get_vt_api_key()
+    if not api_key:
         return {"success": False, "error": "VirusTotal API 키가 설정되지 않았습니다."}
 
     is_valid, valid_or_err = normalize_and_validate_url(raw_url)
@@ -439,7 +471,7 @@ def inspect_url(raw_url: str) -> dict:
     target_url = tech_check["final_url"]
 
     headers = {
-        "x-apikey": VT_API_KEY.strip(),
+        "x-apikey": api_key,
         "accept": "application/json",
     }
     url_id = _encode_url_id(target_url)
@@ -449,8 +481,10 @@ def inspect_url(raw_url: str) -> dict:
         attrs = {}
 
         if res.status_code == 200:
-            payload = res.json()
+            payload = _safe_json_dict(res)
             attrs = payload.get("data", {}).get("attributes", {})
+            if not isinstance(attrs, dict):
+                attrs = {}
             stats = attrs.get("last_analysis_stats", {})
             results_map = attrs.get("last_analysis_results", {})
         elif res.status_code == 404:
@@ -470,7 +504,8 @@ def inspect_url(raw_url: str) -> dict:
             if submit_res.status_code != 200:
                 return {"success": False, "error": f"검사 요청에 실패했습니다. (오류 코드: {submit_res.status_code})"}
 
-            analysis_id = submit_res.json().get("data", {}).get("id")
+            submit_payload = _safe_json_dict(submit_res)
+            analysis_id = submit_payload.get("data", {}).get("id")
             if not analysis_id:
                 return {"success": False, "error": "분석 작업 ID를 받지 못했습니다. 다시 시도해주세요."}
 
@@ -483,15 +518,16 @@ def inspect_url(raw_url: str) -> dict:
                         f"{VT_BASE_URL}/analyses/{analysis_id}", headers=headers, timeout=10
                     )
                     if poll.status_code == 200:
-                        attr = poll.json().get("data", {}).get("attributes", {})
-                        if attr.get("status") == "completed":
+                        poll_payload = _safe_json_dict(poll)
+                        attr = poll_payload.get("data", {}).get("attributes", {})
+                        if isinstance(attr, dict) and attr.get("status") == "completed":
                             stats = attr.get("stats", {})
                             results_map = attr.get("results", {})
                             break
                 except requests.exceptions.RequestException:
                     continue
 
-            if stats is None:
+            if not isinstance(stats, dict):
                 return {
                     "success": False,
                     "error": "처음 등록된 주소라 보안 서버에서 분석 중입니다. 10초 뒤 다시 눌러주세요.",
@@ -500,8 +536,11 @@ def inspect_url(raw_url: str) -> dict:
             try:
                 follow_res = requests.get(f"{VT_BASE_URL}/urls/{url_id}", headers=headers, timeout=6)
                 if follow_res.status_code == 200:
-                    attrs = follow_res.json().get("data", {}).get("attributes", {})
-            except (requests.exceptions.RequestException, ValueError):
+                    follow_payload = _safe_json_dict(follow_res)
+                    f_attrs = follow_payload.get("data", {}).get("attributes", {})
+                    if isinstance(f_attrs, dict):
+                        attrs = f_attrs
+            except requests.exceptions.RequestException:
                 pass
         elif res.status_code in (401, 403):
             return {"success": False, "error": "API 키가 유효하지 않거나 접근 권한이 없습니다."}
@@ -511,6 +550,9 @@ def inspect_url(raw_url: str) -> dict:
             return {"success": False, "error": "VirusTotal 서버가 일시적으로 불안정합니다. 잠시 후 다시 시도해주세요."}
         else:
             return {"success": False, "error": f"외부 보안 서버 오류가 발생했습니다. (코드: {res.status_code})"}
+
+        if not isinstance(stats, dict):
+            return {"success": False, "error": "보안 서버 응답 데이터를 해석할 수 없습니다."}
 
         malicious = int(stats.get("malicious") or 0)
         suspicious = int(stats.get("suspicious") or 0)
@@ -529,7 +571,6 @@ def inspect_url(raw_url: str) -> dict:
             malicious, suspicious, harmless, tech_check["extra_risk"]
         )
 
-        # 1. 보안 기관 검증 게이지
         engine_main = f"안전 {harmless}곳 · 위험 {malicious + suspicious}곳"
         if flagged_engines:
             vendor_brief = (
@@ -553,10 +594,8 @@ def inspect_url(raw_url: str) -> dict:
             engine_hp = 100 if harmless >= 50 else (90 if harmless >= 10 else 80)
             engine_level = "safe"
 
-        # 2. 사이트 성격 · 평판 게이지
         cat_main, cat_desc, cat_hp, cat_level = _summarize_site_profile(attrs, malicious, suspicious)
 
-        # 상단 종합 판정
         reasons = []
         if malicious > 0:
             reasons.append(f"보안 기관 {malicious}곳 악성 탐지")
@@ -633,7 +672,3 @@ def inspect_url(raw_url: str) -> dict:
         return {"success": False, "error": "보안 서버 응답 형식을 해석하는 중 오류가 발생했습니다."}
     except requests.exceptions.RequestException as e:
         return {"success": False, "error": f"네트워크 요청 중 오류가 발생했습니다: {e}"}
-
-
-def escape_text(val: str) -> str:
-    return html.escape(str(val or ""))
