@@ -15,6 +15,7 @@ def init_db():
     """프로그램 시작 시 links 테이블을 자동 생성하고 기존 스키마와 호환시킵니다."""
     try:
         with get_connection() as conn:
+            conn.execute("PRAGMA journal_mode=WAL;")
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS links (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,8 +44,8 @@ def init_db():
 
 def add_direct_link(url: str, source: str) -> bool:
     """요구사항 3: 직접 링크 등록 (체감 위험도='입력 없음', 검사 상태='대기 중')"""
-    clean_url = url.strip()
-    clean_source = source.strip()
+    clean_url = url.strip()[:2000]
+    clean_source = source.strip()[:50]
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     try:
@@ -71,8 +72,8 @@ def save_api_result(
     detail_data: dict,
 ) -> bool:
     """요구사항 5: 외부 API 검사 결과 저장 (초기 체감 위험도='입력 없음')"""
-    clean_url = url.strip()
-    clean_source = source.strip() if source.strip() else "직접 검사"
+    clean_url = url.strip()[:2000]
+    clean_source = (source.strip() if source.strip() else "직접 검사")[:50]
     safe_score = max(1, min(10, int(api_risk_score)))
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -85,7 +86,7 @@ def save_api_result(
                 """,
                 (
                     clean_url,
-                    final_url.strip() or clean_url,
+                    (final_url.strip() or clean_url)[:2000],
                     clean_source,
                     "검사 완료",
                     str(safe_score),
@@ -97,7 +98,7 @@ def save_api_result(
             )
             conn.commit()
         return True
-    except sqlite3.Error:
+    except (sqlite3.Error, TypeError, ValueError):
         return False
 
 
@@ -119,7 +120,7 @@ def update_scan_result_by_id(
                 WHERE id = ?
                 """,
                 (
-                    final_url,
+                    final_url[:2000],
                     "검사 완료",
                     str(safe_score),
                     engine_summary,
@@ -129,7 +130,7 @@ def update_scan_result_by_id(
             )
             conn.commit()
             return cursor.rowcount > 0
-    except sqlite3.Error:
+    except (sqlite3.Error, TypeError, ValueError):
         return False
 
 

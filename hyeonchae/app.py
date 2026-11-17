@@ -11,85 +11,156 @@ st.set_page_config(
     layout="wide",
 )
 
-# 칸과 칸 사이 균형 여백 + 한글 줄바꿈 방지 + 1화면 대시보드 스타일
 st.markdown(
     """
-    <style>
-    .block-container {
-        padding-top: 2.8rem !important;
-        padding-bottom: 1.6rem !important;
-        max-width: 1260px;
-    }
-    [data-testid="stVerticalBlock"] {
-        gap: 1.15rem;
-    }
-    h3 {
-        margin-top: 0 !important;
-        margin-bottom: 0.25rem !important;
-        font-size: 1.35rem !important;
-    }
-    .kpi-box {
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(250, 250, 250, 0.12);
-        border-radius: 10px;
-        padding: 14px 16px;
-        min-height: 80px;
-        margin-top: 4px;
-        margin-bottom: 4px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
-    .kpi-label {
-        font-size: 0.82rem;
-        opacity: 0.78;
-        margin-bottom: 5px;
-        white-space: nowrap;
-    }
-    .kpi-value {
-        font-size: 1.15rem;
-        font-weight: 700;
-        line-height: 1.25;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    .verdict-card {
-        border-radius: 10px;
-        padding: 15px 18px;
-        margin-bottom: 12px;
-        border: 1px solid rgba(250, 250, 250, 0.14);
-        word-break: keep-all;
-    }
-    .verdict-safe {
-        background: rgba(34, 197, 94, 0.12);
-        border-left: 5px solid #22c55e;
-    }
-    .verdict-caution {
-        background: rgba(234, 179, 8, 0.12);
-        border-left: 5px solid #eab308;
-    }
-    .verdict-danger {
-        background: rgba(239, 68, 68, 0.14);
-        border-left: 5px solid #ef4444;
-    }
-    .info-pill {
-        display: inline-block;
-        padding: 4px 10px;
-        border-radius: 6px;
-        background: rgba(255, 255, 255, 0.07);
-        font-size: 0.86rem;
-        margin-right: 6px;
-        white-space: nowrap;
-    }
-    .desc-inline {
-        font-size: 0.85rem;
-        opacity: 0.88;
-        word-break: keep-all;
-        line-height: 1.45;
-    }
-    </style>
-    """,
+<style>
+.block-container {
+    padding-top: 2.8rem !important;
+    padding-bottom: 1.6rem !important;
+    max-width: 1260px;
+}
+[data-testid="stVerticalBlock"] {
+    gap: 1.15rem;
+}
+h3 {
+    margin-top: 0 !important;
+    margin-bottom: 0.25rem !important;
+    font-size: 1.35rem !important;
+}
+.kpi-box {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(250, 250, 250, 0.12);
+    border-radius: 10px;
+    padding: 14px 16px;
+    min-height: 80px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.kpi-label {
+    font-size: 0.82rem;
+    opacity: 0.78;
+    margin-bottom: 5px;
+    white-space: nowrap;
+}
+.kpi-value {
+    font-size: 1.15rem;
+    font-weight: 700;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.unified-panel {
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(250, 250, 250, 0.13);
+    border-radius: 12px;
+    padding: 4px 20px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+.hp-row {
+    padding: 13px 0;
+    border-bottom: 1px solid rgba(250, 250, 250, 0.09);
+}
+.hp-row:last-child {
+    border-bottom: none;
+}
+.hp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 7px;
+    flex-wrap: wrap;
+}
+.hp-title-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.hp-title {
+    font-size: 0.96rem;
+    font-weight: 700;
+}
+.hp-badge {
+    font-size: 0.76rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    letter-spacing: 0.01em;
+}
+.hp-main-val {
+    font-size: 0.9rem;
+    font-weight: 600;
+    opacity: 0.92;
+}
+.hp-percent {
+    font-size: 0.84rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.hp-track {
+    width: 100%;
+    height: 12px;
+    background: rgba(255, 255, 255, 0.09);
+    border-radius: 999px;
+    overflow: hidden;
+    position: relative;
+    margin-bottom: 6px;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+.hp-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.35s ease;
+}
+.hp-desc {
+    font-size: 0.83rem;
+    opacity: 0.82;
+    line-height: 1.4;
+    word-break: keep-all;
+}
+.verdict-card {
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 8px;
+    border: 1px solid rgba(250, 250, 250, 0.14);
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+}
+.verdict-safe {
+    background: rgba(34, 197, 94, 0.12);
+    border-left: 5px solid #22c55e;
+}
+.verdict-caution {
+    background: rgba(234, 179, 8, 0.12);
+    border-left: 5px solid #eab308;
+}
+.verdict-danger {
+    background: rgba(239, 68, 68, 0.14);
+    border-left: 5px solid #ef4444;
+}
+.info-pill {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.07);
+    font-size: 0.86rem;
+    margin-right: 6px;
+    white-space: nowrap;
+}
+.desc-inline {
+    font-size: 0.85rem;
+    opacity: 0.88;
+    word-break: keep-all;
+    line-height: 1.45;
+}
+</style>
+""",
     unsafe_allow_html=True,
 )
 
@@ -135,15 +206,61 @@ def get_comparison_text(api_risk: str, user_risk: str) -> str:
 
 
 def render_kpi_card(col, label: str, value: str, accent_color: str = "#60a5fa"):
-    col.markdown(
-        f"""
-        <div class="kpi-box" style="border-top: 3px solid {accent_color};">
-            <div class="kpi-label">{label}</div>
-            <div class="kpi-value" title="{value}">{value}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    safe_val = api.escape_text(value)
+    html_block = (
+        f'<div class="kpi-box" style="border-top: 3px solid {accent_color};">'
+        f'<div class="kpi-label">{label}</div>'
+        f'<div class="kpi-value" title="{safe_val}">{safe_val}</div>'
+        f"</div>"
     )
+    col.markdown(html_block, unsafe_allow_html=True)
+
+
+def render_unified_health_panel(items: list[dict]):
+    """4개 진단 항목을 하나의 통합 패널 안에 체력바(안전도 게이지) 형태로 렌더링합니다."""
+    level_styles = {
+        "safe": {
+            "label": "안전",
+            "color": "#22c55e",
+            "bg": "rgba(34, 197, 94, 0.16)",
+            "grad": "linear-gradient(90deg, #16a34a, #22c55e)",
+        },
+        "caution": {
+            "label": "주의",
+            "color": "#eab308",
+            "bg": "rgba(234, 179, 8, 0.18)",
+            "grad": "linear-gradient(90deg, #ca8a04, #eab308)",
+        },
+        "danger": {
+            "label": "위험",
+            "color": "#ef4444",
+            "bg": "rgba(239, 68, 68, 0.18)",
+            "grad": "linear-gradient(90deg, #dc2626, #ef4444)",
+        },
+    }
+
+    parts = ['<div class="unified-panel">']
+    for item in items:
+        lv = level_styles.get(item.get("level", "caution"), level_styles["caution"])
+        hp = max(6, min(100, int(item.get("hp", 50))))
+        parts.append(
+            '<div class="hp-row">'
+            '<div class="hp-header">'
+            '<div class="hp-title-group">'
+            f'<span class="hp-title">{api.escape_text(item["title"])}</span>'
+            f'<span class="hp-badge" style="color:{lv["color"]}; background:{lv["bg"]}; border:1px solid {lv["color"]}44;">{lv["label"]}</span>'
+            f'<span class="hp-main-val">{api.escape_text(item["main"])}</span>'
+            "</div>"
+            f'<span class="hp-percent" style="color:{lv["color"]};">안전도 {hp}%</span>'
+            "</div>"
+            '<div class="hp-track">'
+            f'<div class="hp-fill" style="width:{hp}%; background:{lv["grad"]};"></div>'
+            "</div>"
+            f'<div class="hp-desc">{api.escape_text(item["desc"])}</div>'
+            "</div>"
+        )
+    parts.append("</div>")
+    st.markdown("".join(parts), unsafe_allow_html=True)
 
 
 all_records = db.get_all_links()
@@ -154,7 +271,7 @@ danger_cnt = sum(1 for r in all_records if str(r["api_risk"]).isdigit() and int(
 wait_cnt = sum(1 for r in all_records if r["status"] == "대기 중")
 
 # ==============================================================================
-# 왼쪽 사이드바: 역할이 명확한 4개 메뉴 + 점수 기준
+# 왼쪽 사이드바
 # ==============================================================================
 with st.sidebar:
     st.markdown("## 🛡️ 안전링크")
@@ -181,11 +298,11 @@ with st.sidebar:
     )
 
 # ==============================================================================
-# 메뉴 1: 실시간 링크 검사 (요구사항 4, 5)
+# 메뉴 1: 실시간 링크 검사
 # ==============================================================================
 if menu == "🔍 실시간 링크 검사":
     st.markdown("### 🔍 실시간 링크 안전 검사")
-    st.caption("의심스러운 URL을 입력하면 보안 기관 데이터와 주소 안전성을 분석해 1~10점 위험도로 알려줍니다.")
+    st.caption("의심스러운 URL을 입력하면 보안 기관 데이터와 주소 안전성을 분석해 1~10점 위험도와 항목별 안전도 게이지를 보여줍니다.")
 
     with st.form("api_scan_form"):
         c1, c2, c3 = st.columns([2.5, 1.3, 0.9])
@@ -213,7 +330,7 @@ if menu == "🔍 실시간 링크 검사":
                         f"기존 판정: **{get_status_badge(existing['status'], existing['api_risk'])}**"
                     )
 
-            with st.spinner("보안 기관 데이터와 주소 안전성을 확인하고 있습니다..."):
+            with st.spinner("보안 기관 데이터와 주소 안전성을 분석하고 있습니다..."):
                 result = api.inspect_url(clean_url)
 
             if result["success"]:
@@ -241,22 +358,22 @@ if menu == "🔍 실시간 링크 검사":
 
         top_col, save_col = st.columns([4.2, 0.9])
         with top_col:
-            st.markdown(
-                f"""
-                <div class="verdict-card {card_cls}">
-                    <div style="font-size:1.15rem; font-weight:700; margin-bottom:5px;">
-                        {badge_icon} {res['verdict_title']} &nbsp;·&nbsp; 위험도 {score} / 10점
-                    </div>
-                    <div style="font-size:0.93rem; margin-bottom:7px;">{res['verdict_desc']}</div>
-                    <div style="font-size:0.83rem; opacity:0.82;">
-                        검사 주소: <code>{res['final_url']}</code> &nbsp;|&nbsp; 출처: <b>{res['source']}</b>
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
+            formula_line = detail.get("score_formula") or res.get("score_formula", "")
+            formula_html = f" &nbsp;|&nbsp; <span>{api.escape_text(formula_line)}</span>" if formula_line else ""
+            verdict_html = (
+                f'<div class="verdict-card {card_cls}">'
+                f'<div style="font-size:1.15rem; font-weight:700; margin-bottom:4px;">'
+                f"{badge_icon} {api.escape_text(res['verdict_title'])} &nbsp;·&nbsp; 위험도 {score} / 10점"
+                f"</div>"
+                f'<div style="font-size:0.93rem; margin-bottom:6px;">{api.escape_text(res["verdict_desc"])}</div>'
+                f'<div style="font-size:0.81rem; opacity:0.82;">'
+                f"검사 주소: <code>{api.escape_text(res['final_url'])}</code> &nbsp;|&nbsp; "
+                f"출처: <b>{api.escape_text(res['source'])}</b>{formula_html}"
+                f"</div></div>"
             )
+            st.markdown(verdict_html, unsafe_allow_html=True)
         with save_col:
-            st.markdown("<div style='height:30px;'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height:31px;'></div>", unsafe_allow_html=True)
             if st.button("💾 내 기록 저장", type="primary", use_container_width=True):
                 if db.save_api_result(
                     url=res["input_url"],
@@ -275,24 +392,41 @@ if menu == "🔍 실시간 링크 검사":
                 else:
                     st.error("데이터베이스 저장 중 오류가 발생했습니다.")
 
-        https_val = detail.get("https_short") or detail.get("https_text", "-").split("(")[0].strip()
-        addr_val = detail.get("address_short") or detail.get("address_text", "-").split("(")[0].strip()
-
-        d1, d2, d3 = st.columns(3)
-        render_kpi_card(d1, "1. 글로벌 보안 기관 검사", res["engine_summary"], "#38bdf8")
-        render_kpi_card(
-            d2,
-            "2. 보안 연결 (HTTPS)",
-            https_val,
-            "#22c55e" if "적용됨" in https_val else "#eab308",
+        render_unified_health_panel(
+            [
+                {
+                    "title": "1. 보안 기관 검증",
+                    "main": detail.get("engine_main", res["engine_summary"]),
+                    "desc": detail.get("engine_desc", ""),
+                    "hp": detail.get("engine_hp", 80),
+                    "level": detail.get("engine_level", "safe"),
+                },
+                {
+                    "title": "2. 사이트 성격 · 평판",
+                    "main": detail.get("cat_main", "미분류 (신규·개인)"),
+                    "desc": detail.get("cat_desc", ""),
+                    "hp": detail.get("cat_hp", 60),
+                    "level": detail.get("cat_level", "caution"),
+                },
+                {
+                    "title": "3. 보안 연결 · 암호화",
+                    "main": detail.get("conn_main", "-"),
+                    "desc": detail.get("conn_desc", ""),
+                    "hp": detail.get("conn_hp", 50),
+                    "level": detail.get("conn_level", "caution"),
+                },
+                {
+                    "title": "4. 도메인 · 사칭 점검",
+                    "main": detail.get("struct_main", "-"),
+                    "desc": detail.get("struct_desc", ""),
+                    "hp": detail.get("struct_hp", 100),
+                    "level": detail.get("struct_level", "safe"),
+                },
+            ]
         )
-        render_kpi_card(d3, "3. 주소 형식 · 사칭 점검", addr_val, "#a78bfa")
-
-        if detail.get("notes"):
-            st.warning(" · ".join(detail["notes"]))
 
 # ==============================================================================
-# 메뉴 2: 직접 링크 등록 (요구사항 3)
+# 메뉴 2: 직접 링크 등록
 # ==============================================================================
 elif menu == "➕ 직접 링크 등록":
     st.markdown("### ➕ 검사 대기 링크 직접 등록")
@@ -368,7 +502,7 @@ elif menu == "➕ 직접 링크 등록":
         )
 
 # ==============================================================================
-# 메뉴 3: 내 기록 조회 · 검색 · 빠른 관리 (요구사항 1, 2, 6, 7)
+# 메뉴 3: 내 기록 조회 · 검색 · 빠른 관리
 # ==============================================================================
 elif menu == "📋 내 기록 조회 · 검색":
     st.markdown("### 📋 내 기록 조회 및 검색")
@@ -458,19 +592,20 @@ elif menu == "📋 내 기록 조회 · 검색":
                 api_str = f"{target['api_risk']}/10점" if str(target["api_risk"]).isdigit() else "미검사"
                 user_str = f"{target['user_risk']}/10점" if str(target["user_risk"]).isdigit() else "입력 없음"
                 verdict_info = detail.get("verdict_desc") or target["engine_summary"]
+                tech_brief = detail.get("score_formula") or ""
 
-                info_col.markdown(
-                    f"""
-                    <div style="display:flex; align-items:center; flex-wrap:wrap; gap:6px; padding-top:4px;">
-                        <span class="info-pill">API: <b>{api_str}</b></span>
-                        <span class="info-pill">체감: <b>{user_str}</b></span>
-                        <span class="desc-inline">{verdict_info}</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
+                info_html = (
+                    '<div style="display:flex; align-items:center; flex-wrap:wrap; gap:6px; padding-top:2px;">'
+                    f'<span class="info-pill">API: <b>{api_str}</b></span>'
+                    f'<span class="info-pill">체감: <b>{user_str}</b></span>'
+                    f'<span class="desc-inline">{api.escape_text(verdict_info)}</span>'
+                    "</div>"
                 )
+                info_col.markdown(info_html, unsafe_allow_html=True)
+                if tech_brief:
+                    st.caption(f"산출 근거: {tech_brief}")
 
-                st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+                st.markdown("<div style='height:6px;'></div>", unsafe_allow_html=True)
 
                 c_slider, c_save, c_scan, c_del = st.columns([3.0, 1.0, 1.0, 0.8])
                 default_val = int(target["user_risk"]) if str(target["user_risk"]).isdigit() else 5
@@ -496,7 +631,7 @@ elif menu == "📋 내 기록 조회 · 검색":
                 c_scan.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)
                 if target["status"] == "대기 중":
                     if c_scan.button("🔍 지금 검사", key=f"scan_{target['id']}", type="primary", use_container_width=True):
-                        with st.spinner("안전 여부를 검사하고 있습니다..."):
+                        with st.spinner("안전 여부를 분석하고 있습니다..."):
                             scan_res = api.inspect_url(target["url"])
                         if scan_res["success"]:
                             db.update_scan_result_by_id(
@@ -526,7 +661,7 @@ elif menu == "📋 내 기록 조회 · 검색":
                     st.rerun()
 
 # ==============================================================================
-# 메뉴 4: 위험도 통계 · 요약 (상하 여백 보강 + 가로 라벨 차트)
+# 메뉴 4: 위험도 통계 · 요약
 # ==============================================================================
 elif menu == "📊 위험도 통계 · 요약":
     st.markdown("### 📊 내 링크 안전 현황 통계 및 요약")
